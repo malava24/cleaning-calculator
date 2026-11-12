@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cleaning Price Calculator</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #eef3f7;
+      color: #1d2b36;
+    }
+    .card {
+      max-width: 440px;
+      margin: 24px auto;
+      padding: 24px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+    h1 { margin: 0 0 4px; font-size: 1.5rem; }
+    .subtitle { margin: 0 0 20px; color: #6b7c88; }
+    form p { margin: 0 0 16px; }
+    label { font-weight: 600; font-size: 0.95rem; }
+    input[type="number"], select {
+      width: 100%;
+      margin-top: 6px;
+      padding: 10px 12px;
+      font-size: 1rem;
+      border: 1px solid #c5d0d8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    input:focus, select:focus { outline: 2px solid #2a7de1; border-color: #2a7de1; }
+    fieldset {
+      margin: 0 0 8px;
+      padding: 12px 14px;
+      border: 1px solid #c5d0d8;
+      border-radius: 8px;
+    }
+    legend { padding: 0 6px; font-weight: 600; font-size: 0.95rem; }
+    fieldset label { display: block; padding: 6px 0; font-weight: 400; cursor: pointer; }
+    fieldset input { margin-right: 8px; }
+    .total {
+      margin: 20px 0 0;
+      padding: 16px;
+      border-radius: 10px;
+      background: #e8f2fd;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 1.1rem;
+    }
+    #total { font-size: 1.9rem; font-weight: 700; color: #1b5fb3; }
+    #breakdown { margin: 12px 0 0; padding-left: 20px; color: #4a5b67; font-size: 0.95rem; }
+    #quote {
+      width: 100%;
+      margin-top: 12px;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: #2a7de1;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #quote:hover:not(:disabled) { background: #1b5fb3; }
+    #quote:disabled { background: #b5c3cf; cursor: not-allowed; }
+    #note { min-height: 1.2em; margin: 8px 0 0; font-size: 0.9rem; color: #6b7c88; }
+  </style>
+</head>
+<body>
+  <main class="card">
+  <h1>Cleaning Price Calculator</h1>
+  <p class="subtitle">Miami, FL</p>
+
+  <form id="calc">
+    <p>
+      <label for="area">Area (sq ft)</label><br>
+      <input type="number" id="area" min="0" max="100000" value="1000">
+    </p>
+
+    <p>
+      <label for="type">Cleaning type</label><br>
+      <select id="type">
+        <option value="regular">Regular</option>
+        <option value="deep">Deep</option>
+        <option value="renovation">Post-renovation</option>
+      </select>
+    </p>
+
+    <p>
+      <label for="baths">Bathrooms</label><br>
+      <input type="number" id="baths" min="0" max="20" value="1">
+    </p>
+
+    <fieldset>
+      <legend>Extras</legend>
+      <label><input type="checkbox" id="windows"> Windows</label><br>
+      <label><input type="checkbox" id="oven"> Oven</label>
+    </fieldset>
+  </form>
+
+  <div class="total"><span>Total</span> <span id="total">$0</span></div>
+  <ul id="breakdown"></ul>
+  <p id="note"></p>
+  <button type="button" id="quote">Request a quote</button>
+  </main>
+
+  <script>
+    // Prices in USD. Change the numbers here to adjust pricing.
+    const PRICES = {
+      perSqFt: { regular: 0.12, deep: 0.20, renovation: 0.30 },
+      perBathroom: 25,
+      windows: 35,
+      oven: 35,
+      minimum: 80 // minimum charge per visit
+    };
+
+    const MAX_AREA = 100000; // largest area (sq ft) the calculator accepts
+    const MAX_BATHS = 20;    // largest number of bathrooms the calculator accepts
+
+    // Quote requests are sent to this address. Replace it with your own.
+    const QUOTE_EMAIL = 'quotes@example.com';
+
+    let lastQuote = null; // the most recent calculated price, used by the button
+
+    const form = document.getElementById('calc');
+    const totalEl = document.getElementById('total');
+
+    function calculate() {
+      const areaInput = document.getElementById('area');
+      let area = Math.max(0, Number(areaInput.value) || 0);
+      if (area > MAX_AREA) {
+        area = MAX_AREA;
+        areaInput.value = MAX_AREA; // show the user the value actually used
+      }
+      const bathsInput = document.getElementById('baths');
+      let baths = Math.max(0, Math.floor(Number(bathsInput.value) || 0));
+      if (baths > MAX_BATHS) {
+        baths = MAX_BATHS;
+        bathsInput.value = MAX_BATHS; // show the user the value actually used
+      }
+      const type = document.getElementById('type').value;
+
+      // Each line of the price: [label, amount]
+      const items = [
+        ['Cleaning (' + area + ' sq ft)', area * PRICES.perSqFt[type]],
+        ['Bathrooms (' + baths + ')', baths * PRICES.perBathroom]
+      ];
+      if (document.getElementById('windows').checked) items.push(['Windows', PRICES.windows]);
+      if (document.getElementById('oven').checked) items.push(['Oven', PRICES.oven]);
+
+      let total = items.reduce((sum, item) => sum + item[1], 0);
+
+      const noteEl = document.getElementById('note');
+      if (area === 0) {
+        total = 0;
+        noteEl.textContent = 'Enter the area to see a price.';
+      } else if (total < PRICES.minimum) {
+        items.push(['Minimum charge adjustment', PRICES.minimum - total]);
+        total = PRICES.minimum;
+        noteEl.textContent = 'Minimum charge of $' + PRICES.minimum + ' applied.';
+      } else {
+        noteEl.textContent = '';
+      }
+
+      totalEl.textContent = '$' + total.toFixed(2);
+
+      lastQuote = {
+        area: area,
+        typeLabel: document.getElementById('type').selectedOptions[0].text,
+        baths: baths,
+        items: items,
+        total: total
+      };
+      document.getElementById('quote').disabled = area === 0;
+
+      // Show the breakdown (empty when there is no area)
+      const listEl = document.getElementById('breakdown');
+      listEl.innerHTML = '';
+      if (area > 0) {
+        items.forEach(function (item) {
+          const li = document.createElement('li');
+          li.textContent = item[0] + ': $' + item[1].toFixed(2);
+          listEl.appendChild(li);
+        });
+      }
+    }
+
+    // "Request a quote" opens an email with the details filled in.
+    document.getElementById('quote').addEventListener('click', function () {
+      if (!lastQuote || lastQuote.area === 0) return;
+      const lines = [
+        'Hello, I would like a cleaning quote in Miami.',
+        '',
+        'Cleaning type: ' + lastQuote.typeLabel,
+        'Area: ' + lastQuote.area + ' sq ft',
+        'Bathrooms: ' + lastQuote.baths,
+        ''
+      ];
+      lastQuote.items.forEach(function (item) {
+        lines.push(item[0] + ': $' + item[1].toFixed(2));
+      });
+      lines.push('', 'Estimated total: $' + lastQuote.total.toFixed(2));
+
+      window.location.href = 'mailto:' + QUOTE_EMAIL +
+        '?subject=' + encodeURIComponent('Cleaning quote request') +
+        '&body=' + encodeURIComponent(lines.join('\n'));
+    });
+
+    // Recalculate on typing or any change (the "input" event covers both), and once on page load.
+    form.addEventListener('input', calculate);
+    calculate();
+  </script>
+</body>
+</html>
